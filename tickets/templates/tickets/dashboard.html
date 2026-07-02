@@ -1,0 +1,320 @@
+{% extends 'tickets/base.html' %}
+
+{% block title %}Dashboard - ResolveIT{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-header" style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+    <div>
+        <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 4px;">Service Dashboard</h1>
+        <p style="color: var(--text-secondary);">
+            {% if user.is_staff %}
+                Monitor and resolve user support requests.
+            {% else %}
+                Track your active support tickets.
+            {% endif %}
+        </p>
+    </div>
+    <div>
+        <a href="{% url 'tickets:ticket_create' %}" class="btn btn-primary">
+            <i class="fa-solid fa-plus"></i> Submit Ticket
+        </a>
+    </div>
+</div>
+
+<!-- Stats Counter Grid -->
+<div class="stats-grid">
+    <div class="stat-card glass-card">
+        <div class="stat-val">{{ total|default:0 }}</div>
+        <div class="stat-label">Total Tickets</div>
+    </div>
+    <div class="stat-card stat-open glass-card">
+        <div class="stat-val">{{ open_count|default:0 }}</div>
+        <div class="stat-label">Open</div>
+    </div>
+    <div class="stat-card stat-progress glass-card">
+        <div class="stat-val">{{ progress_count|default:0 }}</div>
+        <div class="stat-label">In Progress</div>
+    </div>
+    <div class="stat-card stat-resolved glass-card">
+        <div class="stat-val">{{ resolved_count|default:0 }}</div>
+        <div class="stat-label">Resolved</div>
+    </div>
+    <div class="stat-card stat-urgent glass-card">
+        <div class="stat-val" style="color: var(--priority-urgent);">{{ urgent_count|default:0 }}</div>
+        <div class="stat-label">Urgent</div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div class="charts-grid">
+    <div class="glass-card chart-card">
+        <h3 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 16px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-chart-pie" style="color: var(--accent-blue);"></i> Tickets by Status
+        </h3>
+        <div style="position: relative; height: 180px; width: 100%;">
+            <canvas id="statusChart"></canvas>
+        </div>
+    </div>
+    <div class="glass-card chart-card">
+        <h3 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 16px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-chart-bar" style="color: var(--accent-purple);"></i> Tickets by Category
+        </h3>
+        <div style="position: relative; height: 180px; width: 100%;">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Filters & Search -->
+<div class="glass-card" style="padding: 16px 24px; margin-bottom: 24px;">
+    <form method="get" class="filter-form" id="filter-form">
+        <!-- Search bar -->
+        <div class="search-wrapper">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <input type="text" name="q" value="{{ search_query }}" placeholder="Search tickets..." class="search-input">
+        </div>
+        
+        <!-- Category filter -->
+        <select name="category" class="filter-select" onchange="document.getElementById('filter-form').submit()">
+            <option value="">All Categories</option>
+            {% for cat in categories %}
+            <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>
+                {{ cat.name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <!-- Status filter -->
+        <select name="status" class="filter-select" onchange="document.getElementById('filter-form').submit()">
+            <option value="">All Statuses</option>
+            <option value="OPEN" {% if selected_status == 'OPEN' %}selected{% endif %}>Open</option>
+            <option value="IN_PROGRESS" {% if selected_status == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
+            <option value="RESOLVED" {% if selected_status == 'RESOLVED' %}selected{% endif %}>Resolved</option>
+            <option value="CLOSED" {% if selected_status == 'CLOSED' %}selected{% endif %}>Closed</option>
+        </select>
+
+        <!-- Priority filter -->
+        <select name="priority" class="filter-select" onchange="document.getElementById('filter-form').submit()">
+            <option value="">All Priorities</option>
+            <option value="LOW" {% if selected_priority == 'LOW' %}selected{% endif %}>Low</option>
+            <option value="MEDIUM" {% if selected_priority == 'MEDIUM' %}selected{% endif %}>Medium</option>
+            <option value="HIGH" {% if selected_priority == 'HIGH' %}selected{% endif %}>High</option>
+            <option value="URGENT" {% if selected_priority == 'URGENT' %}selected{% endif %}>Urgent</option>
+        </select>
+
+        <!-- Assignee filter (Staff only) -->
+        {% if user.is_staff %}
+        <select name="assigned_to" class="filter-select" onchange="document.getElementById('filter-form').submit()">
+            <option value="">All Assignees</option>
+            <option value="unassigned" {% if selected_assigned_to == 'unassigned' %}selected{% endif %}>Unassigned</option>
+            {% for agent in agents %}
+            <option value="{{ agent.id }}" {% if selected_assigned_to == agent.id|stringformat:"s" %}selected{% endif %}>
+                {{ agent.username }}
+            </option>
+            {% endfor %}
+        </select>
+        {% endif %}
+
+        <button type="submit" class="btn btn-secondary" style="padding: 10px 14px;">
+            <i class="fa-solid fa-filter"></i> Apply
+        </button>
+        
+        {% if search_query or selected_status or selected_priority or selected_category or selected_assigned_to %}
+        <a href="{% url 'tickets:dashboard' %}" class="btn btn-secondary btn-danger" style="padding: 10px 14px; text-decoration: none;">
+            <i class="fa-solid fa-xmark"></i> Clear
+        </a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Ticket Listing -->
+<div class="ticket-list">
+    {% for ticket in tickets %}
+    <a href="{% url 'tickets:ticket_detail' ticket.pk %}" class="ticket-card glass-card priority-{{ ticket.priority|lower }}">
+        <div class="ticket-info">
+            <div class="ticket-meta">
+                <span class="ticket-id-large">#{{ ticket.id }}</span>
+                {% if ticket.category %}
+                    <span style="background: rgba(255, 255, 255, 0.05); padding: 2px 8px; border-radius: 8px; font-weight: 500; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.05); color: var(--accent-blue);">
+                        {{ ticket.category.name }}
+                    </span>
+                {% endif %}
+                <span>Submitted by: <strong>{{ ticket.created_by.username }}</strong></span>
+                <span>{{ ticket.created_at|date:"M d, Y H:i" }}</span>
+            </div>
+            <div class="ticket-title">{{ ticket.title }}</div>
+            
+            <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 20px; margin-top: 6px;">
+                <span>
+                    <i class="fa-solid fa-user-gear"></i> 
+                    {% if ticket.assigned_to %}
+                        Assigned: <span style="color: var(--text-primary);">{{ ticket.assigned_to.username }}</span>
+                    {% else %}
+                        <span style="color: var(--text-muted); font-style: italic;">Unassigned</span>
+                    {% endif %}
+                </span>
+                
+                {% if ticket.due_date %}
+                <span>
+                    <i class="fa-solid fa-clock"></i> 
+                    {% if ticket.is_sla_breached %}
+                        <span class="badge badge-urgent" style="font-size: 0.7rem; padding: 2px 6px;">SLA Breached</span>
+                    {% else %}
+                        Due: <span style="color: var(--text-primary);">{{ ticket.due_date|date:"M d, H:i" }}</span>
+                    {% endif %}
+                </span>
+                {% endif %}
+
+                {% if ticket.attachment %}
+                <span style="color: var(--text-muted);">
+                    <i class="fa-solid fa-paperclip"></i> Attachment
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="ticket-actions">
+            <!-- Priority Badge -->
+            <span class="badge badge-{{ ticket.priority|lower }}">
+                {{ ticket.get_priority_display }}
+            </span>
+            
+            <!-- Status Badge -->
+            <span class="badge badge-{{ ticket.status|lower }}">
+                {{ ticket.get_status_display }}
+            </span>
+            
+            <!-- Comments Count -->
+            <span style="font-size: 0.85rem; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; min-width: 60px;">
+                <i class="fa-regular fa-comment"></i> {{ ticket.comments.count }}
+            </span>
+            
+            <i class="fa-solid fa-chevron-right" style="color: var(--text-muted);"></i>
+        </div>
+    </a>
+    {% empty %}
+    <div class="glass-card empty-state">
+        <i class="fa-regular fa-folder-open empty-icon"></i>
+        <h3>No tickets found</h3>
+        <p>No support tickets match the current search or filters.</p>
+        <a href="{% url 'tickets:dashboard' %}" class="btn btn-secondary">Show All Tickets</a>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if is_paginated %}
+<div style="display: flex; justify-content: center; gap: 16px; margin-top: 32px;">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_assigned_to %}&assigned_to={{ selected_assigned_to }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-secondary">
+        <i class="fa-solid fa-arrow-left"></i> Previous
+    </a>
+    {% endif %}
+    
+    <span style="display: inline-flex; align-items: center; font-size: 0.95rem; color: var(--text-secondary);">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </span>
+    
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_assigned_to %}&assigned_to={{ selected_assigned_to }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-secondary">
+        Next <i class="fa-solid fa-arrow-right"></i>
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Check if charts are in context
+    const rawStatusData = '{{ status_chart_json|safe }}';
+    const rawCategoryData = '{{ category_chart_json|safe }}';
+    
+    if (!rawStatusData || !rawCategoryData) return;
+    
+    const statusData = JSON.parse(rawStatusData);
+    const categoryData = JSON.parse(rawCategoryData);
+
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const textColor = isLight ? '#475569' : '#94a3b8';
+    const gridColor = isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.05)';
+
+    // Status Doughnut Chart
+    const ctxStatus = document.getElementById('statusChart');
+    if (ctxStatus) {
+        new Chart(ctxStatus.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: statusData.labels,
+                datasets: [{
+                    data: statusData.values,
+                    backgroundColor: [
+                        '#94a3b8', // Cool Grey (Open)
+                        '#d97706', // Amber (Progress)
+                        '#10b981', // Emerald (Resolved)
+                        '#6b7280'  // Slate (Closed)
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 11, weight: '500' },
+                            padding: 12
+                        }
+                    }
+                },
+                cutout: '70%'
+            }
+        });
+    }
+
+    // Category Horizontal Bar Chart
+    const ctxCategory = document.getElementById('categoryChart');
+    if (ctxCategory) {
+        new Chart(ctxCategory.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: categoryData.labels,
+                datasets: [{
+                    data: categoryData.values,
+                    backgroundColor: 'rgba(148, 163, 184, 0.75)',
+                    hoverBackgroundColor: '#94a3b8',
+                    borderRadius: 5,
+                    borderWidth: 0,
+                    barThickness: 14
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        grid: { color: gridColor, drawBorder: false },
+                        ticks: { color: textColor, font: { family: 'Inter', size: 10 }, stepSize: 1 }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { color: textColor, font: { family: 'Inter', size: 10, weight: '600' } }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

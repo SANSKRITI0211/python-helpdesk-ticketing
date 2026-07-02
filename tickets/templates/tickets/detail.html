@@ -1,0 +1,314 @@
+{% extends 'tickets/base.html' %}
+
+{% block title %}Ticket #{{ ticket.id }} - ResolveIT{% endblock %}
+{% block breadcrumb %}Ticket Details{% endblock %}
+
+{% block content %}
+<!-- Back to Dashboard -->
+<div style="margin-bottom: 24px;">
+    <a href="{% url 'tickets:dashboard' %}" class="btn btn-secondary" style="padding: 8px 14px;">
+        <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+
+{% if ticket.is_sla_breached %}
+<div class="glass-card" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.05); padding: 12px 24px; margin-bottom: 24px; border-left: 4px solid var(--priority-urgent);">
+    <p style="color: #fca5a5; font-weight: 600; display: flex; align-items: center; gap: 8px; font-size: 0.95rem;">
+        <i class="fa-solid fa-circle-exclamation" style="animation: pulse 1.5s infinite; color: var(--priority-urgent);"></i> 
+        SLA Breach Warning: This ticket is past its resolution due date ({{ ticket.due_date|date:"M d, Y H:i" }}) and remains unresolved.
+    </p>
+</div>
+{% endif %}
+
+<div class="ticket-detail-grid">
+    <!-- Main Detail & Timeline Column -->
+    <div class="detail-main">
+        <div class="glass-card">
+            <div class="detail-header">
+                <div>
+                    <span class="ticket-id-large">
+                        Ticket #{{ ticket.id }}
+                        {% if ticket.category %}
+                            <span style="background: rgba(255, 255, 255, 0.05); padding: 2px 8px; border-radius: 8px; font-weight: 500; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.05); color: var(--accent-blue); margin-left: 8px;">
+                                {{ ticket.category.name }}
+                            </span>
+                        {% endif %}
+                    </span>
+                    <h1 style="font-size: 1.8rem; font-weight: 700; margin-top: 6px; color: var(--text-primary);">{{ ticket.title }}</h1>
+                </div>
+                <div>
+                    <span class="badge badge-{{ ticket.status|lower }}">
+                        {{ ticket.get_status_display }}
+                    </span>
+                </div>
+            </div>
+            
+            <div style="margin-top: 24px;">
+                <h3 style="font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Description</h3>
+                <div class="ticket-desc">{{ ticket.description }}</div>
+                
+                {% if ticket.attachment %}
+                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;"><i class="fa-solid fa-paperclip"></i> Attachment</h4>
+                    <a href="{{ ticket.attachment.url }}" target="_blank" class="btn btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">
+                        <i class="fa-solid fa-download"></i> Download {{ ticket.attachment.name|slice:"19:" }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Activity Timeline -->
+        <div>
+            <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-timeline" style="color: var(--accent-blue);"></i> Activity Timeline
+            </h2>
+            
+            <div class="comments-container">
+                {% for event in timeline %}
+                    {% if event.type == 'comment' %}
+                        <div class="comment-card {% if event.item.is_internal %}comment-system{% endif %}" {% if event.item.is_internal %}style="border-left-color: var(--accent-purple); background: rgba(139, 92, 246, 0.03);"{% endif %}>
+                            <div class="user-avatar" style="width: 32px; height: 32px; font-size: 0.85rem; {% if event.item.is_internal %}background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));{% endif %}">
+                                {{ event.item.author.username|make_list|first|upper }}
+                            </div>
+                            <div class="comment-body">
+                                <div class="comment-header">
+                                    <span class="comment-author">
+                                        {{ event.item.author.username }}
+                                        {% if event.item.author.is_superuser %}
+                                            <span class="role-badge" style="font-size: 0.65rem; background: rgba(59, 130, 246, 0.15); color: #93c5fd;">Admin</span>
+                                        {% elif event.item.author.is_staff %}
+                                            <span class="role-badge" style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.15); color: #fde047;">Agent</span>
+                                        {% endif %}
+                                        
+                                        {% if event.item.is_internal %}
+                                            <span class="role-badge" style="font-size: 0.65rem; background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3);">
+                                                <i class="fa-solid fa-lock"></i> Internal Note
+                                            </span>
+                                        {% endif %}
+                                    </span>
+                                    <span class="comment-date">{{ event.item.created_at|date:"M d, Y H:i" }}</span>
+                                </div>
+                                <div class="comment-content">{{ event.item.content }}</div>
+                                
+                                {% if event.item.attachment %}
+                                <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 8px;">
+                                    <a href="{{ event.item.attachment.url }}" target="_blank" style="font-size: 0.8rem; color: var(--accent-blue); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                        <i class="fa-solid fa-paperclip"></i> Download {{ event.item.attachment.name|slice:"20:" }}
+                                    </a>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% elif event.type == 'audit' %}
+                        <!-- System Audit Log Event -->
+                        <div class="audit-timeline-item" style="display: flex; gap: 16px; padding: 10px 16px; margin-left: 24px; border-left: 2px dashed var(--border-color); font-size: 0.85rem; color: var(--text-secondary);">
+                            <div style="color: var(--accent-blue); width: 16px; text-align: center;">
+                                {% if event.item.field_name == 'status' %}
+                                    <i class="fa-solid fa-arrows-spin"></i>
+                                {% elif event.item.field_name == 'assigned_to' %}
+                                    <i class="fa-solid fa-user-check"></i>
+                                {% else %}
+                                    <i class="fa-solid fa-pen-nib"></i>
+                                {% endif %}
+                            </div>
+                            <div style="flex: 1;">
+                                <strong>{{ event.item.changed_by.username }}</strong> updated 
+                                <span style="color: var(--text-primary); font-weight: 500;">{{ event.item.field_name }}</span>:
+                                <code style="background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 4px;">{{ event.item.old_value }}</code>
+                                <i class="fa-solid fa-arrow-right-long" style="margin: 0 4px; font-size: 0.75rem;"></i>
+                                <code style="background: rgba(59, 130, 246, 0.1); color: #93c5fd; padding: 1px 4px; border-radius: 4px;">{{ event.item.new_value }}</code>
+                            </div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">
+                                {{ event.item.changed_at|date:"M d, H:i" }}
+                            </div>
+                        </div>
+                    {% endif %}
+                {% empty %}
+                    <p style="color: var(--text-muted); font-style: italic; text-align: center; padding: 24px 0;">No comments or updates yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Add Comment / Note Form -->
+        {% if ticket.status != 'CLOSED' or user.is_staff %}
+        <div class="glass-card" style="margin-top: 16px;">
+            <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px;">
+                <i class="fa-regular fa-comment-dots" style="color: var(--accent-blue);"></i> Add Update or Comment
+            </h3>
+            
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group">
+                    {{ comment_form.content }}
+                </div>
+                
+                <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+                    <!-- Attachment input -->
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="font-size: 0.8rem; margin-bottom: 4px; display: block;">Attach File (optional)</label>
+                        {{ comment_form.attachment }}
+                    </div>
+                    
+                    <!-- Internal Note Checkbox (Only if staff, hidden otherwise) -->
+                    {% if user.is_staff %}
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 20px;">
+                        {{ comment_form.is_internal }}
+                        <label for="{{ comment_form.is_internal.id_for_label }}" style="margin-bottom: 0; cursor: pointer; color: var(--accent-purple); font-weight: 600;">
+                            <i class="fa-solid fa-lock"></i> Post as Internal Note
+                        </label>
+                    </div>
+                    {% else %}
+                        {{ comment_form.is_internal }}
+                    {% endif %}
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end;">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-regular fa-paper-plane"></i> Post Comment
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% else %}
+        <div class="glass-card" style="margin-top: 16px; border-left: 4px solid var(--text-muted); padding: 16px 20px;">
+            <p style="color: var(--text-secondary); font-style: italic;">
+                <i class="fa-solid fa-lock"></i> This ticket is closed. Re-opening this ticket or posting comments requires staff privileges.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar Info Column -->
+    <div class="detail-sidebar">
+        <div class="glass-card">
+            <h2 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Ticket Details</h2>
+            
+            <div class="sidebar-section">
+                <div class="sidebar-title">Status</div>
+                <div class="sidebar-val">
+                    <span class="badge badge-{{ ticket.status|lower }}">{{ ticket.get_status_display }}</span>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <div class="sidebar-title">Priority</div>
+                <div class="sidebar-val">
+                    <span class="badge badge-{{ ticket.priority|lower }}">{{ ticket.get_priority_display }}</span>
+                </div>
+            </div>
+
+            {% if ticket.category %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">Category</div>
+                <div class="sidebar-val" style="font-weight: 600; color: var(--accent-blue);">
+                    <i class="fa-solid fa-tags" style="font-size: 0.85rem; margin-right: 6px;"></i> {{ ticket.category.name }}
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="sidebar-section">
+                <div class="sidebar-title">Created By</div>
+                <div class="sidebar-val" style="font-weight: 600;">
+                    <i class="fa-solid fa-user" style="font-size: 0.85rem; color: var(--text-secondary); margin-right: 6px;"></i> {{ ticket.created_by.username }}
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Assigned Agent</div>
+                <div class="sidebar-val">
+                    <i class="fa-solid fa-user-gear" style="font-size: 0.85rem; color: var(--text-secondary); margin-right: 6px;"></i> 
+                    {% if ticket.assigned_to %}
+                        <span style="font-weight: 600;">{{ ticket.assigned_to.username }}</span>
+                    {% else %}
+                        <span style="color: var(--text-muted); font-style: italic;">Unassigned</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if ticket.due_date %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">SLA Due Date</div>
+                <div class="sidebar-val" style="font-weight: 600; {% if ticket.is_sla_breached %}color: var(--priority-urgent);{% endif %}">
+                    <i class="fa-solid fa-clock" style="font-size: 0.85rem; margin-right: 6px;"></i> 
+                    {{ ticket.due_date|date:"M d, Y H:i" }}
+                    {% if ticket.is_sla_breached %}
+                        <div style="font-size: 0.75rem; text-transform: uppercase; margin-top: 4px; font-weight: 700;">Breached</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Created Date</div>
+                <div class="sidebar-val" style="font-size: 0.9rem; color: var(--text-secondary);">
+                    {{ ticket.created_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+
+            <!-- Client Edit Button (Only if Open) -->
+            {% if not user.is_staff and ticket.created_by == user and ticket.status == 'OPEN' %}
+            <div style="margin-top: 20px;">
+                <a href="{% url 'tickets:ticket_edit' ticket.pk %}" class="btn btn-secondary" style="width: 100%; justify-content: center;">
+                    <i class="fa-solid fa-pen"></i> Edit Ticket
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Staff Action Panel -->
+        {% if user.is_staff %}
+        <div class="glass-card" style="border-color: rgba(139, 92, 246, 0.2);">
+            <h2 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; color: #a78bfa;">
+                <i class="fa-solid fa-screwdriver-wrench"></i> Staff Controls
+            </h2>
+            
+            <!-- Quick Status Change -->
+            <form method="post" style="margin-bottom: 20px;">
+                {% csrf_token %}
+                <input type="hidden" name="update_status" value="1">
+                <div class="form-group">
+                    <label for="status-select">Change Status</label>
+                    <select name="status" id="status-select" class="form-select" style="padding: 8px 12px; font-size: 0.9rem;">
+                        <option value="OPEN" {% if ticket.status == 'OPEN' %}selected{% endif %}>Open</option>
+                        <option value="IN_PROGRESS" {% if ticket.status == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
+                        <option value="RESOLVED" {% if ticket.status == 'RESOLVED' %}selected{% endif %}>Resolved</option>
+                        <option value="CLOSED" {% if ticket.status == 'CLOSED' %}selected{% endif %}>Closed</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px;">
+                    Update Status
+                </button>
+            </form>
+
+            <!-- Quick Agent Assignment -->
+            <form method="post" style="margin-bottom: 20px;">
+                {% csrf_token %}
+                <input type="hidden" name="assign_agent" value="1">
+                <div class="form-group">
+                    <label for="agent-select">Assign Agent</label>
+                    <select name="assigned_to" id="agent-select" class="form-select" style="padding: 8px 12px; font-size: 0.9rem;">
+                        <option value="">-- Unassign --</option>
+                        {% for agent in agents %}
+                        <option value="{{ agent.id }}" {% if ticket.assigned_to == agent %}selected{% endif %}>
+                            {{ agent.username }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px;">
+                    Update Assignment
+                </button>
+            </form>
+
+            <!-- Full Edit Ticket Button -->
+            <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                <a href="{% url 'tickets:ticket_edit' ticket.pk %}" class="btn btn-primary" style="width: 100%; justify-content: center; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);">
+                    <i class="fa-solid fa-pen-to-square"></i> Full Edit Ticket
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

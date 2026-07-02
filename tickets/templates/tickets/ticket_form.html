@@ -1,0 +1,155 @@
+{% extends 'tickets/base.html' %}
+
+{% block title %}
+    {% if object %}Edit Ticket #{{ object.id }} - ResolveIT{% else %}Submit New Ticket - ResolveIT{% endif %}
+{% endblock %}
+{% block breadcrumb %}{% if object %}Edit Ticket{% else %}New Ticket{% endif %}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 24px;">
+    <a href="{% if object %}{% url 'tickets:ticket_detail' object.pk %}{% else %}{% url 'tickets:dashboard' %}{% endif %}" class="btn btn-secondary" style="padding: 8px 14px;">
+        <i class="fa-solid fa-arrow-left"></i> Cancel
+    </a>
+</div>
+
+<div class="glass-card" style="max-width: 720px; margin: 0 auto;">
+    <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 24px;">
+        <h1 style="font-size: 1.8rem; font-weight: 700; color: var(--text-primary);">
+            {% if object %}
+                <i class="fa-solid fa-pen-to-square" style="color: var(--accent-purple); margin-right: 8px;"></i> Edit Ticket #{{ object.id }}
+            {% else %}
+                <i class="fa-solid fa-plus-circle" style="color: var(--accent-blue); margin-right: 8px;"></i> Submit New Ticket
+            {% endif %}
+        </h1>
+        <p style="color: var(--text-secondary); margin-top: 4px;">
+            {% if object %}
+                Modify the details or settings for this support request.
+            {% else %}
+                Fill out the form below to register a support ticket with the IT team.
+            {% endif %}
+        </p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        
+        <!-- AI Auto-Categorization Recommendation Banner -->
+        <div id="ai-suggestion-toast" class="ai-suggestion-box" style="display: none; margin-top: 10px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 0.88rem; font-weight: 500; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-purple); font-size: 1rem;"></i>
+                <span><strong>AI Assistant:</strong> Detected <span id="ai-cat-suggest" style="color: var(--accent-blue); font-weight: 700;"></span> category and <span id="ai-prio-suggest" style="font-weight: 800;"></span> priority. Values auto-applied.</span>
+            </p>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="glass-card" style="padding: 12px 16px; border-left: 4px solid var(--priority-urgent); margin-bottom: 20px; background: rgba(239, 68, 68, 0.05);">
+            {% for error in form.non_field_errors %}
+            <p style="color: var(--priority-urgent); font-size: 0.9rem;"><i class="fa-solid fa-circle-exclamation"></i> {{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% for field in form %}
+        <div class="form-group">
+            <label for="{{ field.id_for_label }}" style="font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+                {{ field.label }}
+                {% if field.field.required %}
+                    <span style="color: var(--priority-urgent); font-size: 0.75rem;">* Required</span>
+                {% endif %}
+            </label>
+            
+            {{ field }}
+            
+            {% if field.help_text %}
+                <span style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">{{ field.help_text }}</span>
+            {% endif %}
+            
+            {% if field.errors %}
+                {% for error in field.errors %}
+                <span style="color: var(--priority-urgent); font-size: 0.85rem; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> {{ error }}
+                </span>
+                {% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 20px; margin-top: 32px;">
+            <a href="{% if object %}{% url 'tickets:ticket_detail' object.pk %}{% else %}{% url 'tickets:dashboard' %}{% endif %}" class="btn btn-secondary">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fa-regular fa-square-check"></i> 
+                {% if object %}Save Changes{% else %}Submit Ticket{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const titleInput = document.getElementById('id_title');
+    const categorySelect = document.getElementById('id_category');
+    const prioritySelect = document.getElementById('id_priority');
+    const aiToast = document.getElementById('ai-suggestion-toast');
+    const aiCatSuggest = document.getElementById('ai-cat-suggest');
+    const aiPrioSuggest = document.getElementById('ai-prio-suggest');
+    
+    if (!titleInput || !categorySelect || !prioritySelect) return;
+    
+    // Check if editing (disable on edit page to preserve manual states)
+    const isEditPage = window.location.pathname.includes('/edit/');
+    if (isEditPage) return;
+
+    let debounceTimer;
+    
+    titleInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const text = titleInput.value.trim();
+        
+        if (text.length < 5) {
+            aiToast.style.display = 'none';
+            return;
+        }
+        
+        debounceTimer = setTimeout(() => {
+            fetch("{% url 'tickets:api_classify' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ text: text })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.category_id) {
+                    categorySelect.value = data.category_id;
+                    aiCatSuggest.textContent = data.category_name;
+                    aiPrioSuggest.textContent = data.priority;
+                    
+                    // Style the priority badge text dynamically
+                    if (data.priority === 'URGENT') {
+                        aiPrioSuggest.style.color = 'var(--priority-urgent)';
+                    } else if (data.priority === 'HIGH') {
+                        aiPrioSuggest.style.color = 'var(--priority-high)';
+                    } else if (data.priority === 'MEDIUM') {
+                        aiPrioSuggest.style.color = 'var(--priority-medium)';
+                    } else {
+                        aiPrioSuggest.style.color = 'var(--priority-low)';
+                    }
+                    
+                    prioritySelect.value = data.priority;
+                    aiToast.style.display = 'block';
+                } else {
+                    aiToast.style.display = 'none';
+                }
+            })
+            .catch(err => console.error("AI classification error:", err));
+        }, 500);
+    });
+});
+</script>
+{% endblock %}

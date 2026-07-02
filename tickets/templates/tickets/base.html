@@ -1,0 +1,122 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ResolveIT Portal{% endblock %}</title>
+    <!-- Favicon -->
+    <link rel="shortcut icon" type="image/jpeg" href="{% static 'tickets/images/resolveit_logo.jpg' %}">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{% static 'tickets/style.css' %}?v=2.7">
+    {% block extra_css %}{% endblock %}
+    <script>
+        // Set initial theme before content paint to prevent flashing
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Modern Left Sidebar Navigation -->
+        {% if user.is_authenticated %}
+        <aside class="nav-sidebar">
+            <div class="sidebar-top">
+                <a href="{% url 'tickets:dashboard' %}" class="logo" style="display: flex; align-items: center; gap: 12px; text-decoration: none;">
+                    <img src="{% static 'tickets/images/resolveit_logo.jpg' %}" alt="ResolveIT Logo" style="width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05); object-fit: cover;">
+                    <span style="font-weight: 800; font-size: 1.4rem; background: linear-gradient(135deg, var(--text-primary), var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px;">ResolveIT</span>
+                </a>
+            </div>
+
+            <nav class="sidebar-menu">
+                <a href="{% url 'tickets:dashboard' %}" class="menu-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="{% url 'tickets:ticket_create' %}" class="menu-item {% if request.resolver_match.url_name == 'ticket_create' %}active{% endif %}">
+                    <i class="fa-solid fa-plus-circle"></i>
+                    <span>New Ticket</span>
+                </a>
+                <a href="{% url 'tickets:profile' %}" class="menu-item {% if request.resolver_match.url_name == 'profile' %}active{% endif %}">
+                    <i class="fa-solid fa-circle-user"></i>
+                    <span>My Profile</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <!-- Theme Toggle Button -->
+                <button id="theme-toggle" class="sidebar-toggle-btn" title="Toggle Theme">
+                    <i id="theme-icon" class="fa-solid fa-moon"></i>
+                    <span>Switch Theme</span>
+                </button>
+
+                <!-- User Card Session -->
+                <div class="user-session-card" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                    <a href="{% url 'tickets:profile' %}" style="display: flex; align-items: center; gap: 10px; text-decoration: none; flex: 1; min-width: 0; cursor: pointer;" title="View Profile">
+                        <div class="session-avatar">
+                            {{ user.username|slice:":1"|upper }}
+                        </div>
+                        <div class="session-info">
+                            <div class="session-name" title="{{ user.username }}">{{ user.username }} (ID: #{{ user.id }})</div>
+                            <span class="role-badge">{% if user.is_staff %}Agent{% else %}Client{% endif %}</span>
+                        </div>
+                    </a>
+                    <form method="post" action="{% url 'tickets:logout' %}" style="margin: 0; display: inline-flex;">
+                        {% csrf_token %}
+                        <button type="submit" class="logout-icon-btn" title="Sign Out">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </aside>
+        {% endif %}
+
+        <!-- Right Side Main content area -->
+        <div class="main-wrapper">
+            <!-- Top bar -->
+            {% if user.is_authenticated %}
+            <header class="top-bar-header">
+                <div class="top-bar-left">
+                    <span class="breadcrumb-item">ResolveIT</span>
+                    <i class="fa-solid fa-angle-right breadcrumb-separator"></i>
+                    <span class="breadcrumb-item active">
+                        {% block breadcrumb %}Portal{% endblock %}
+                    </span>
+                </div>
+                <div class="top-bar-right">
+                    <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+                        <span class="status-indicator"></span>
+                        <span>Service Status: <strong>Online</strong></span>
+                    </div>
+                </div>
+            </header>
+            {% endif %}
+
+            <main class="main-content">
+                {% if messages %}
+                <div class="messages-container" style="max-width: 1200px; margin: 0 auto 20px auto; padding: 0 4px;">
+                    {% for message in messages %}
+                    <div class="glass-card message-card {% if message.tags %}{{ message.tags }}{% endif %}" style="padding: 14px 20px; border-left: 4px solid var(--accent-blue); display: flex; align-items: center; gap: 12px; margin-bottom: 12px; background: var(--bg-secondary); border-top-right-radius: 12px; border-bottom-right-radius: 12px;">
+                        <i class="fa-solid fa-circle-info" style="color: var(--accent-blue);"></i>
+                        <span style="font-size: 0.9rem; font-weight: 500;">{{ message }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% block content %}{% endblock %}
+            </main>
+
+            <footer>
+                <p>&copy; 2026 ResolveIT Service Portal. Designed for portfolio demonstration.</p>
+            </footer>
+        </div>
+    </div>
+
+    <script src="{% static 'tickets/app.js' %}?v=2.7"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
